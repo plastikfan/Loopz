@@ -1,9 +1,11 @@
 using namespace System.Management.Automation;
 using namespace System.Collections;
 using namespace System.IO;
+using namespace System.Text;
+using module Elizium.Krayola;
 using module Elizium.Klassy;
 
-Describe 'Rename-Many' {
+Describe 'Rename-Many' -Tag 'remy' {
   BeforeAll {
     Get-Module Elizium.Loopz | Remove-Module
     Import-Module .\Output\Elizium.Loopz\Elizium.Loopz.psm1 `
@@ -160,7 +162,7 @@ Describe 'Rename-Many' {
         } # and: Source matches Pattern
 
         Context 'and: Transform' {
-          It 'should: transform Rename' {
+          It 'should: transform Rename' -Tag 'INVALID' -Skip { # Transform only allowed with InPlace not move with Anchor
             $script:expected = @{
               'loopz.application.t1.log' = '_applicloopz.ation.t1_.log';
               'loopz.application.t2.log' = '_applicloopz.ation.t2_.log';
@@ -417,7 +419,7 @@ Describe 'Rename-Many' {
       It 'should: not rename' {
         $script:expected = @{}
 
-        [string]$copy = 'blah';
+        [string]$copy = 'foo';
         Get-ChildItem -Path $directoryPath -File | Rename-Many -Append '-POSTFIX_${tail}' `
           -Copy $copy -Diagnose;
       }
@@ -426,7 +428,7 @@ Describe 'Rename-Many' {
 
   Context 'given: ReplaceWith' {
     Context 'and: Source matches Pattern' {
-      Context 'and: Copy is non-regex static text' {
+      Context 'and: Copy is non-regex static text' -Skip {
         # It seems like this makes no sense; there's no point in testing static -Copy text as
         # in reality, the user should use -With. However, the user might use -Copy for
         # static text and if they do, there's no reason why it shouldn't just work, even though
@@ -434,16 +436,16 @@ Describe 'Rename-Many' {
         #
 
         Context 'Copy does NOT match' {
-          It 'should: do rename; replace First Pattern for Copy text' {
+          It 'should: do rename; replace First Pattern for Copy text' -Tag 'INVALID' -Skip {
             $script:expected = @{}
 
             Get-ChildItem -Path $directoryPath | Rename-Many -File `
-              -Pattern 'a', f -Copy 'blah' -WhatIf;
+              -Pattern 'a', f -Copy 'bar' -WhatIf;
           }
         }
 
         Context 'and: First Only' {
-          It 'should: do rename; replace First Pattern for Copy text' {
+          It 'should: do rename; replace First Pattern for Copy text' -Tag 'INVALID' -Skip {
             $script:expected = @{
               'loopz.application.t1.log' = 'loopz.tpplication.t1.log';
               'loopz.application.t2.log' = 'loopz.tpplication.t2.log';
@@ -458,7 +460,7 @@ Describe 'Rename-Many' {
         } # and: First Only
 
         Context 'and: replace 3rd match' {
-          It 'should: do rename; replace 3rd Occurrence for Copy text' {
+          It 'should: do rename; replace 3rd Occurrence for Copy text' -Tag 'INVALID' -Skip {
             $script:expected = @{
               'loopz.application.t1.log' = 'loopz.applicati0n.t1.log';
               'loopz.application.t2.log' = 'loopz.applicati0n.t2.log';
@@ -470,7 +472,7 @@ Describe 'Rename-Many' {
         } # and: replace 3rd match
 
         Context 'and: Last Only' {
-          It 'should: do rename; replace Last Pattern for Copy text' {
+          It 'should: do rename; replace Last Pattern for Copy text' -Tag 'INVALID' -Skip {
             $script:expected = @{
               'loopz.application.t1.log' = 'loopz.applic@tion.t1.log';
               'loopz.application.t2.log' = 'loopz.applic@tion.t2.log';
@@ -497,7 +499,7 @@ Describe 'Rename-Many' {
             }
 
             Get-ChildItem -Path $directoryPath | Rename-Many -File `
-              -Pattern 'a', f -Copy 't\d' -Whole c -WhatIf;
+              -Pattern 'a', f -Copy 't\d' -Paste '${_c}' -Whole c -WhatIf;
           }
         } # and: Whole Copy
 
@@ -521,7 +523,7 @@ Describe 'Rename-Many' {
             $script:expected = @{}
 
             Get-ChildItem -Path $directoryPath | Rename-Many -File `
-              -Pattern 'a', f -Copy '\d{4}' -WhatIf;
+              -Pattern 'a', f -Copy '\d{4}' -Paste '${_c}' -WhatIf;
           }
         }
 
@@ -536,7 +538,7 @@ Describe 'Rename-Many' {
             }
 
             Get-ChildItem -Path $directoryPath | Rename-Many -File `
-              -Pattern 'a', f -Copy 't\d' -WhatIf;
+              -Pattern 'a', f -Copy 't\d' -Paste '${_c}' -WhatIf;
           }
         } # and: First Only
       } # and: Copy is regex
@@ -553,12 +555,12 @@ Describe 'Rename-Many' {
             }
 
             Get-ChildItem -Path $directoryPath | Rename-Many -File `
-              -Pattern 'a', f -Copy ($(esc('.')) + '\w{3}') -WhatIf;
+              -Pattern 'a', f -Copy ($(esc('.')) + '\w{3}') -Paste '${_c}' -WhatIf;
           }
         } # and: First Only
       } # and: Copy needs escapes
 
-      Context 'With' {
+      Context 'With' -Skip { # Paste
         Context 'and: First Only' {
           It 'should: do rename; replace First Pattern for Copy text' {
             $script:expected = @{
@@ -570,7 +572,7 @@ Describe 'Rename-Many' {
             }
 
             Get-ChildItem -Path $directoryPath | Rename-Many -File `
-              -Pattern 'a', f -With '@' -WhatIf;
+              -Pattern 'a', f -Paste '@' -WhatIf;
           }
 
           Context 'and: replace 3rd match' {
@@ -581,7 +583,7 @@ Describe 'Rename-Many' {
               }
 
               Get-ChildItem -Path $directoryPath | Rename-Many -File `
-                -Pattern 'o', 3 -With '0' -WhatIf;
+                -Pattern 'o', 3 -Paste '0' -WhatIf;
             }
           } # and: replace 3rd match
 
@@ -596,13 +598,13 @@ Describe 'Rename-Many' {
               }
 
               Get-ChildItem -Path $directoryPath | Rename-Many -File `
-                -Pattern 'a', l -With '@' -WhatIf;
+                -Pattern 'a', l -Paste '@' -WhatIf;
             }
           } # and: Last Only
         } # and: First Only
 
         Context 'and: Transform' {
-          It 'should: transform Rename' {
+          It 'should: transform Rename' -Tag 'Bug' {
             $script:expected = @{
               'loopz.application.t1.log' = '_loopz.@pplication.t1_.log';
               'loopz.application.t2.log' = '_loopz.@pplication.t2_.log';
@@ -622,7 +624,7 @@ Describe 'Rename-Many' {
             }
 
             Get-ChildItem -Path $directoryPath | Rename-Many -File `
-              -Pattern 'a', f -With '@' -Transform $transform -WhatIf;
+              -Pattern 'a', f -Paste '@' -Transform $transform -WhatIf;
           }
         }
       } # With
@@ -636,7 +638,7 @@ Describe 'Rename-Many' {
             }
 
             Get-ChildItem -Path $directoryPath | Rename-Many -File `
-              -Pattern 'loopz' -Except 'data' -Copy 'h00pz' -WhatIf;
+              -Pattern 'loopz' -Except 'data' -Copy 'h00pz' -Paste '${_c}' -WhatIf;
           }
         }
       } # and: Except
@@ -651,7 +653,7 @@ Describe 'Rename-Many' {
             }
 
             Get-ChildItem -Path $directoryPath | Rename-Many -File `
-              -Pattern 'loopz' -Include 'data' -Copy 'h00pz' -WhatIf;
+              -Pattern 'loopz' -Include 'data' -Copy 'h00pz' -Paste '${_c}' -WhatIf;
           }
         }
       } # and: Except
@@ -675,12 +677,12 @@ Describe 'Rename-Many' {
           }
 
           Get-ChildItem -Path $directoryPath | Rename-Many -Context $context -File `
-            -Pattern 'a', l -With '@' -WhatIf;
+            -Pattern 'a', l -Paste '@' -WhatIf;
         }
       }
 
-      Context 'and: "Cut" (without replacement)' {
-        It 'should: do rename; cut the Pattern' {
+      Context 'and: "Cut" (without replacement)' { # New Cut param
+        It 'should: do rename; cut the Pattern' -Tag 'INVALID', 'Cut' -Skip {
           $script:expected = @{
             'loopz.application.t1.log' = 'application.t1.log';
             'loopz.application.t2.log' = 'application.t2.log';
@@ -706,7 +708,7 @@ Describe 'Rename-Many' {
           [string]$plastikmanPath = './Tests/Data/traverse/Audio/MINIMAL/Plastikman';
 
           Get-ChildItem -Path $plastikmanPath | Rename-Many -Directory `
-            -Pattern 'e' -Copy '3' -WhatIf;
+            -Pattern 'e' -Copy '3' -Paste '${_c}' -WhatIf;
         }
       }
     } # and: Source matches Pattern
@@ -714,7 +716,7 @@ Describe 'Rename-Many' {
 
   Context 'given: Diagnose enabled' { # THESE TESTS ARE IN WRONG SECTION
     Context 'MoveToAnchor' {
-      Context 'and: Source matches with Named Captures' {
+      Context 'and: Source matches with Named Captures' -Tag 'RE-WRITE' -Skip { # Paste/Anchor not compatible
         Context 'and: Copy matches' {
           Context 'and: Anchor matches' {
             It 'should: do rename; move Pattern match with Copy capture' {
@@ -816,7 +818,7 @@ Describe 'Rename-Many' {
           It 'should: throw' {
             {
               Get-ChildItem -Path $directoryPath | Rename-Many -File `
-                -Pattern 'o', 3 -With $(esc('(name)')) -WhatIf;
+                -Pattern 'o', 3 -With $(esc('(name)')) -Anchor 'z' -WhatIf;
             } | Should -Throw;
           }
         }
@@ -848,7 +850,7 @@ Describe 'Rename-Many' {
       {
         [string]$badWith = '(((';
         Get-ChildItem -Path $directoryPath | Rename-Many -File `
-          -Pattern 'o', 3 -Copy $badWith -WhatIf;
+          -Pattern 'o', 3 -Copy $badWith -Paste '${_c}' -WhatIf;
       } | Should -Throw;
     }
   } # given: invalid Copy expression
@@ -865,7 +867,67 @@ Describe 'Rename-Many' {
   } # given: invalid Anchor expression
 } # Rename-Many
 
-Describe 'Rename-Many' {
+Describe 'Rename-Many parameter sets' -Tag 'remy' {
+  BeforeAll {
+    Get-Module Elizium.Loopz | Remove-Module
+    Import-Module .\Output\Elizium.Loopz\Elizium.Loopz.psm1 `
+      -ErrorAction 'stop' -DisableNameChecking;
+
+    InModuleScope Elizium.Loopz {
+      [hashtable]$script:_signals = Get-Signals;
+      [hashtable]$script:_theme = Get-KrayolaTheme;
+    }
+  }
+
+  BeforeEach {
+    InModuleScope Elizium.Loopz {
+      [StringBuilder]$script:_builder = [StringBuilder]::new();
+      [krayon]$script:_krayon = New-Krayon -Theme $_theme;
+
+      [string]$commandName = 'Rename-Many';
+      [DryRunner]$script:_runner = New-DryRunner -CommandName $commandName `
+        -Signals $_signals -Krayon $_krayon;
+    }
+  } # BeforeEach
+
+  context 'given: using DryRunner' {
+    Context 'given: Valid Parameter Set' {
+      It 'should: resolve <parameters> to <paramSet>' -Tag 'Current' -TestCases @(
+        # MoveToAnchor
+        #
+        @{ Parameters = 'underscore', 'Pattern', 'Anchor';
+          ParamSet    = 'MoveToAnchor' 
+        },
+        @{ Parameters = 'underscore', 'Pattern', 'Anchor', 'With';
+          ParamSet    = 'MoveToAnchor' 
+        },
+        @{ Parameters = 'underscore', 'Pattern', 'Anchor', 'Drop';
+          ParamSet    = 'MoveToAnchor' 
+        },
+        @{ Parameters = 'underscore', 'Pattern', 'Anchor', 'With', 'Relation';
+          ParamSet    = 'MoveToAnchor' 
+        }
+        # ReplacePaste
+        #
+        # @{ Parameters = 'underscore', 'Pattern', 'Anchor', 'Paste';
+        #   ParamSet    = 'ReplacePaste' 
+        # }
+      ) {
+        InModuleScope -ModuleName Elizium.Loopz -Parameters @{ Parameters = $parameters; ParamSet = $paramSet } {
+          param(
+            $Parameters, $ParamSet
+          )
+          [CommandParameterSetInfo[]]$paramSets = $_runner.Resolve($Parameters);
+          $paramSets.Count | Should -Be 1 -Because "of [$($Parameters -join ', ')]";
+          $paramSets[0].Name | Should -Be $ParamSet;
+        }
+      }
+    } # given: Valid Parameter Set
+  } # given: using DryRunner
+
+} # Rename-Many parameter sets
+
+Describe 'Rename-Many' -Skip {
   BeforeAll {
     Get-Module Elizium.Loopz | Remove-Module
     Import-Module .\Output\Elizium.Loopz\Elizium.Loopz.psm1 `
@@ -876,16 +938,16 @@ Describe 'Rename-Many' {
 
     [string]$script:directoryPath = './Tests/Data/fefsi/';
 
-    Mock -ModuleName Elizium.Loopz rename-FsItem {
-      param(
-        [FileSystemInfo]$From,
-        [string]$To,
-        [HashTable]$Undo,
-        $Shell,
-        [switch]$WhatIf
-      )
-      return $To;
-    }
+    # Mock -ModuleName Elizium.Loopz rename-FsItem {
+    #   param(
+    #     [FileSystemInfo]$From,
+    #     [string]$To,
+    #     [HashTable]$Undo,
+    #     $Shell,
+    #     [switch]$WhatIf
+    #   )
+    #   return $To;
+    # }
   }
 
   Context 'given: Parameter Set' {

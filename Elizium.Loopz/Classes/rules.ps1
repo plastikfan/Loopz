@@ -448,10 +448,11 @@ class DryRunner {
     [System.Management.Automation.CommandParameterSetInfo[]]$candidateSets = `
       $this.CommandInfo.ParameterSets | Where-Object {
       $(
-        (Test-Intersect $_.Parameters.Name $params) -and
+        (Test-ContainsAll $_.Parameters.Name $params) -and
         (Test-ContainsAll $params ($_.Parameters | Where-Object { $_.IsMandatory }).Name)
       )
     };
+
     return $candidateSets;
   } # Resolve
 } # DryRunner

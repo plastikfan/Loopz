@@ -141,6 +141,13 @@ function Move-Match {
     [string]$PatternOccurrence = 'f',
 
     [Parameter()]
+    [System.Text.RegularExpressions.RegEx]$Cut,
+
+    [Parameter()]
+    [ValidateScript( { ($_ -ne '*') -and ($_ -ne '0') })]
+    [string]$CutOccurrence = 'f',
+
+    [Parameter()]
     [System.Text.RegularExpressions.RegEx]$Anchor,
 
     [Parameter()]

@@ -321,65 +321,60 @@ function Rename-Many {
   [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingEmptyCatchBlock', '')]
   [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '')]
   [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '')]
-  [CmdletBinding(SupportsShouldProcess, DefaultParameterSetName = 'ReplaceWith')]
+  [CmdletBinding(SupportsShouldProcess, DefaultParameterSetName = 'UpdateInPlace')] # MoveToAnchor
   [Alias('remy')]
   param
   (
     [Parameter(Mandatory, ValueFromPipeline = $true)]
     [System.IO.FileSystemInfo]$underscore,
 
-    [Parameter(ParameterSetName = 'MoveToAnchor', Mandatory, Position = 0)]
-    [Parameter(ParameterSetName = 'ReplaceWith', Mandatory, Position = 0)]
-    [Parameter(ParameterSetName = 'MoveToStart', Mandatory, Position = 0)]
-    [Parameter(ParameterSetName = 'MoveToEnd', Mandatory, Position = 0)]
+    [Parameter(ParameterSetName = 'MoveToAnchor', Mandatory, Position = 1)]
+    [Parameter(ParameterSetName = 'UpdateInPlace', Mandatory, Position = 1)]
+    [Parameter(ParameterSetName = 'MoveToStart', Mandatory, Position = 1)]
+    [Parameter(ParameterSetName = 'MoveToEnd', Mandatory, Position = 1)]
+    [Parameter(ParameterSetName = 'CustomTransform', Mandatory, Position = 1)]
     [ValidateScript( { { $(test-ValidPatternArrayParam -Arg $_ -AllowWildCard ) } })]
     [array]$Pattern,
 
-    [Parameter(ParameterSetName = 'MoveToAnchor', Mandatory)]
+    [Parameter(ParameterSetName = 'MoveToAnchor', Mandatory, Position = 2)]
     [ValidateScript( { $(test-ValidPatternArrayParam -Arg $_) })]
     [array]$Anchor,
 
     [Parameter(ParameterSetName = 'MoveToAnchor')]
+    [Parameter(ParameterSetName = 'UpdateInPlace')]
     [ValidateSet('before', 'after')]
     [string]$Relation = 'after',
 
     [Parameter(ParameterSetName = 'MoveToAnchor')]
-    [Parameter(ParameterSetName = 'ReplaceWith')]
+    [Parameter(ParameterSetName = 'UpdateInPlace')]
     [Parameter(ParameterSetName = 'Prepend')]
     [Parameter(ParameterSetName = 'Append')]
     [ValidateScript( { { $(test-ValidPatternArrayParam -Arg $_) } })]
     [array]$Copy,
 
-    [Parameter(ParameterSetName = 'MoveToAnchor')]
-    [Parameter(ParameterSetName = 'ReplaceWith')]
-    [Parameter(ParameterSetName = 'MoveToStart')]
-    [Parameter(ParameterSetName = 'MoveToEnd')]
+    [Parameter(ParameterSetName = 'MoveToAnchor', Position = 3)]
+    [Parameter(ParameterSetName = 'MoveToStart', Position = 2)]
+    [Parameter(ParameterSetName = 'MoveToEnd', Position = 2)]
     [string]$With,
 
-    # Both Start & End are members of ReplaceWith, but they shouldn't be supplied at
-    # the same time. So how to prevent this? Use ValidateScript instead.
-    #
-    [Parameter(ParameterSetName = 'ReplaceWith')]
     [Parameter(ParameterSetName = 'MoveToStart', Mandatory)]
-    [ValidateScript( { -not($PSBoundParameters.ContainsKey('End')); })] # validation no longer required
     [switch]$Start,
 
-    [Parameter(ParameterSetName = 'ReplaceWith')]
     [Parameter(ParameterSetName = 'MoveToEnd', Mandatory)]
-    [ValidateScript( { -not($PSBoundParameters.ContainsKey('Start')); })] # validation no longer required
     [switch]$End,
 
-    [Parameter(ParameterSetName = 'MoveToAnchor')]
-    [Parameter(ParameterSetName = 'ReplaceWith')]
-    [Parameter(ParameterSetName = 'MoveToStart')]
-    [Parameter(ParameterSetName = 'MoveToEnd')]
+    [Parameter(ParameterSetName = 'UpdateInPlace', Mandatory)]
+    [Parameter(ParameterSetName = 'CustomTransform', Mandatory)]
     [string]$Paste,
 
     [Parameter(ParameterSetName = 'MoveToAnchor')]
-    [Parameter(ParameterSetName = 'ReplaceWith')]
+    [Parameter(ParameterSetName = 'UpdateInPlace')]
     [Parameter(ParameterSetName = 'MoveToStart')]
     [Parameter(ParameterSetName = 'MoveToEnd')]
     [string]$Drop,
+
+    [Parameter(ParameterSetName = 'NoReplacement', Mandatory)]
+    [string]$Cut,
 
     [Parameter(ParameterSetName = 'Prepend', Mandatory)]
     [string]$Prepend,
@@ -408,7 +403,7 @@ function Rename-Many {
     [string]$Include,
 
     [Parameter()]
-    [ValidateSet('p', 'a', 'c', 'i', 'x', '*')]
+    [ValidateSet('p', 'a', 'c', 'i', 'x', 'u', '*')]
     [string]$Whole,
 
     [Parameter()]
@@ -418,7 +413,7 @@ function Rename-Many {
     [ValidateScript( { $_ -gt 0 } )]
     [int]$Top,
 
-    [Parameter()]
+    [Parameter(ParameterSetName = 'CustomTransform', Mandatory)]
     [scriptblock]$Transform,
 
     [Parameter()]
@@ -484,7 +479,14 @@ function Rename-Many {
       # ------------------------------------------ [ Bind action parameters ] ---
       #
 
+      # To do, make the action applicable in all modes
+      # We need extra actions:
+      #   + Cut (handled by move-match)
+      #   + Add-Appendage append/prepend
+      #
       if ($action -eq 'Add-Appendage') {
+        # Bind append/prepend action parameters
+        #
         [hashtable]$actionParameters = @{
           'Value'     = $adjustedName;
           'Appendage' = $_exchange['LOOPZ.REMY.APPENDAGE'];
@@ -492,13 +494,26 @@ function Rename-Many {
         }
       }
       else {
+        # Bind move/update/(cut/transform) action parameters
+        #
         [hashtable]$actionParameters = @{
           'Value'   = $adjustedName;
-          'Pattern' = $_exchange['LOOPZ.REMY.PATTERN-REGEX'];
         }
 
-        $actionParameters['PatternOccurrence'] = $_exchange.ContainsKey('LOOPZ.REMY.PATTERN-OCC') `
-          ? $_exchange['LOOPZ.REMY.PATTERN-OCC'] : 'f';
+        # Pattern is present for all actions except Cut
+        #
+        if ($_exchange.ContainsKey('LOOPZ.REMY.PATTERN-REGEX')) {
+          $actionParameters['Pattern'] = $_exchange['LOOPZ.REMY.PATTERN-REGEX'];
+
+          $actionParameters['PatternOccurrence'] = $_exchange.ContainsKey('LOOPZ.REMY.PATTERN-OCC') `
+            ? $_exchange['LOOPZ.REMY.PATTERN-OCC'] : 'f';
+        }
+        elseif ($_exchange.ContainsKey('LOOPZ.REMY.CUT-REGEX')) {
+          $actionParameters['Cut'] = $_exchange['LOOPZ.REMY.CUT-REGEX'];
+
+          $actionParameters['CutOccurrence'] = $_exchange.ContainsKey('LOOPZ.REMY.CUT-OCC') `
+            ? $_exchange['LOOPZ.REMY.CUT-OCC'] : 'f';
+        }
 
         if ($action -eq 'Move-Match') {
           if ($_exchange.ContainsKey('LOOPZ.REMY.ANCHOR.REGEX')) {
@@ -528,6 +543,10 @@ function Rename-Many {
               $actionParameters['End'] = $true;
               break;
             }
+            'CUT' {
+              $actionParameters['End'] = $true;
+              break;
+            }
             default {
               throw "doRenameFsItems: encountered Invalid 'LOOPZ.REMY.ANCHOR-TYPE': '$AnchorType'";
             }
@@ -535,8 +554,10 @@ function Rename-Many {
         } # $action
       }
 
+      # Bind generic action parameters
+      #
       if ($performDiagnosis) {
-        $actionParameters['Diagnose'] = $_exchange['LOOPZ.DIAGNOSE']
+        $actionParameters['Diagnose'] = $_exchange['LOOPZ.DIAGNOSE'];
       }
 
       if ($_exchange.ContainsKey('LOOPZ.REMY.COPY.REGEX')) {
@@ -551,7 +572,7 @@ function Rename-Many {
       }
 
       if ($_exchange.ContainsKey('LOOPZ.REMY.PASTE')) {
-        $actionParameters['Paste'] = $_exchange['LOOPZ.REMY.PASTE']
+        $actionParameters['Paste'] = $_exchange['LOOPZ.REMY.PASTE'];
       }
 
       # -------------------------------------------------- [ Execute action ] ---
@@ -884,14 +905,14 @@ function Rename-Many {
     # [Include]
     #
     [PSCustomObject]$includeSpec = [PSCustomObject]@{
-      Activate       = $PSBoundParameters.ContainsKey('Include') -and `
+      Activate      = $PSBoundParameters.ContainsKey('Include') -and `
         -not([string]::IsNullOrEmpty($Include));
-      SpecType       = 'regex';
-      Name           = 'Include';
-      Value          = $Include;
-      Signal         = 'INCLUDE';
-      RegExKey       = 'LOOPZ.REMY.INCLUDE.REGEX';
-      OccurrenceKey  = 'LOOPZ.REMY.INCLUDE-OCC';
+      SpecType      = 'regex';
+      Name          = 'Include';
+      Value         = $Include;
+      Signal        = 'INCLUDE';
+      RegExKey      = 'LOOPZ.REMY.INCLUDE.REGEX';
+      OccurrenceKey = 'LOOPZ.REMY.INCLUDE-OCC';
     }
     $bootStrap.Register($includeSpec);
 
@@ -1014,24 +1035,24 @@ function Rename-Many {
     #
     [PSCustomObject]$anchoredSpec = if ($PSBoundParameters.ContainsKey('Start') -and $Start) {
       [PSCustomObject]@{
-        Activate       = $true;
-        Name           = 'Anchored';
-        SpecType       = 'regex';
-        Value          = $("^*{_dependency}");
-        Dependency     = 'Pattern';
-        RegExKey       = 'LOOPZ.REMY.ANCHORED-REGEX';
-        OccurrenceKey  = 'LOOPZ.REMY.ANCHORED-OCC';
+        Activate      = $true;
+        Name          = 'Anchored';
+        SpecType      = 'regex';
+        Value         = $("^*{_dependency}");
+        Dependency    = 'Pattern';
+        RegExKey      = 'LOOPZ.REMY.ANCHORED-REGEX';
+        OccurrenceKey = 'LOOPZ.REMY.ANCHORED-OCC';
       }
     }
     elseif ($PSBoundParameters.ContainsKey('End') -and $End) {
       [PSCustomObject]@{
-        Activate       = $true;
-        Name           = 'Anchored';
-        SpecType       = 'regex';
-        Value          = $("*{_dependency}$");
-        Dependency     = 'Pattern';
-        RegExKey       = 'LOOPZ.REMY.ANCHORED-REGEX';
-        OccurrenceKey  = 'LOOPZ.REMY.ANCHORED-OCC';
+        Activate      = $true;
+        Name          = 'Anchored';
+        SpecType      = 'regex';
+        Value         = $("*{_dependency}$");
+        Dependency    = 'Pattern';
+        RegExKey      = 'LOOPZ.REMY.ANCHORED-REGEX';
+        OccurrenceKey = 'LOOPZ.REMY.ANCHORED-OCC';
       }
     }
     else {
@@ -1124,6 +1145,24 @@ function Rename-Many {
     }
     $bootStrap.Register($relationSpec);
 
+    # [Cut]
+    #
+    [PSCustomObject]$cutSpec = [PSCustomObject]@{
+      Activate       = $PSBoundParameters.ContainsKey('Cut') -and $Cut;
+      SpecType       = 'regex';
+      Name           = 'Cut';
+      Value          = $Cut;
+      Signal         = 'CUT-A';
+      WholeSpecifier = 'u';
+      RegExKey       = 'LOOPZ.REMY.CUT-REGEX';
+      OccurrenceKey  = 'LOOPZ.REMY.CUT-OCC';
+      Keys           = @{
+        'LOOPZ.REMY.ACTION'      = 'Move-Match';
+        'LOOPZ.REMY.ANCHOR-TYPE' = 'CUT';
+      }
+    }
+    $bootStrap.Register($cutSpec);
+
     # ------------------------------------------------------- [ Relations ] ---
     #
 
@@ -1145,33 +1184,6 @@ function Rename-Many {
       }
       Name      = 'IsMove';
       SpecType  = 'simple';
-    }
-
-    # [Cut]
-    #
-    [PSCustomObject]$cutSpec = [PSCustomObject]@{
-      Activator   = [scriptblock] {
-        [OutputType([boolean])]
-        param(
-          [hashtable]$Entities,
-          [hashtable]$Relations
-        )
-
-        [boolean]$ime = $Relations.ContainsKey('IsMove');
-        [boolean]$result = $Entities.ContainsKey('Pattern') -and -not($ime) -and `
-          -not($Entities.ContainsKey('Copy')) -and `
-          -not($Entities.ContainsKey('With')) -and `
-          -not($Entities.ContainsKey('Paste')) -and `
-          -not($Entities.ContainsKey('Prepend')) -and `
-          -not($Entities.ContainsKey('Append'));
-
-        return $result;
-      }
-      Name        = 'Cut';
-      SpecType    = 'signal';
-      Signal      = 'CUT-A';
-      SignalValue = $signals['SWITCH-ON'].Value;
-      Force       = 'Props';
     }
 
     # [IsUpdate]
@@ -1197,7 +1209,7 @@ function Rename-Many {
 
     # Bootstrap ***
     #
-    $null = $bootStrap.Build(@($isMoveSpec, $cutSpec, $isUpdateSpec));
+    $null = $bootStrap.Build(@($isMoveSpec, $isUpdateSpec));
 
     # --------------------------------------- [ Bootstrap dependent setup ] ---
     #
